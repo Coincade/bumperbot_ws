@@ -1,14 +1,16 @@
 import os
+from pathlib import Path
 from launch import LaunchDescription
 from launch_ros.actions import Node
-from launch.actions import DeclareLaunchArgument
+from launch.actions import DeclareLaunchArgument, SetEnvironmentVariable, IncludeLaunchDescription
 from ament_index_python.packages import get_package_share_directory
 from launch_ros.parameter_descriptions import ParameterValue
 from launch.substitutions import Command, LaunchConfiguration
+from launch.launch_description_sources import PythonLaunchDescriptionSource
 
 def generate_launch_description():
     bumperbot_description_dir = get_package_share_directory('bumperbot_description')
-    
+
     model_arg = DeclareLaunchArgument(
         name='model',
         default_value=os.path.join(bumperbot_description_dir, 'urdf', 'bumperbot.urdf.xacro'),
@@ -27,22 +29,35 @@ def generate_launch_description():
         }]
     )
     
-    joint_state_publisher_gui = Node(
-        package='joint_state_publisher_gui',
-        executable='joint_state_publisher_gui',
+    gazebo_resource_path = SetEnvironmentVariable(
+        name='GZ_SIM_RESOURCE_PATH',
+        value=[
+            str(Path(bumperbot_description_dir).parent.resolve())
+            ]
     )
     
-    rviz_node = Node(
-        package='rviz2',
-        executable='rviz2',
-        name="rviz2",
+    gazebo = IncludeLaunchDescription(
+        PythonLaunchDescriptionSource([
+                os.path.join(
+                    get_package_share_directory('ros_gz_sim'), "launch"), "/gz_sim.launch.py"
+        ]),
+        launch_arguments=[
+            ("gz_args", [" -v 4", " -r", " empty.sdf"])
+        ]
+    )
+    
+    gz_spawn_entity = Node(
+        package='ros_gz_sim',
+        executable='create',
         output='screen',
-        arguments=['-d', os.path.join(get_package_share_directory('bumperbot_description'), 'rviz', 'display.rviz')] 
+        arguments=["-topic", "robot_description",
+                   "-name", "bumperbot"]
     )
-    
     return LaunchDescription([
         model_arg,
         robot_state_publisher_node,
-        joint_state_publisher_gui,
-        rviz_node
+        gazebo_resource_path,
+        gazebo,
+        gz_spawn_entity
     ])
+
